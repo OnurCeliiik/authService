@@ -28,3 +28,63 @@ An authentication service written in Go
         * Retrieve a single task by its ID.
     * Update a task: Modify task details (ex: update reset status) or mark as completed/pending using its ID.
     * Delete a task: Remove an authentication task based on it's ID.
+
+
+#### Local Setup
+
+```bash
+cp .env.example .env
+docker compose up -d          # Postgres only
+go run ./cmd/api              # API on host
+
+# Or run Postgres + API in Docker:
+docker compose up -d --build
+```
+
+Environment variables (see `.env.example`):
+
+| Variable | Description |
+|----------|-------------|
+| `PORT` | HTTP listen port (default `8080`) |
+| `DATABASE_URL` | Postgres DSN |
+| `JWT_SECRET` | HMAC secret for access tokens |
+| `JWT_TTL` | Token lifetime (e.g. `24h`) |
+
+#### API (v1)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Liveness + DB ping |
+| POST | `/api/v1/signup` | Register with email/password |
+| POST | `/api/v1/login` | Issue Bearer access token |
+
+#### Smoke test (signup → login → JWT)
+
+With the API running on `http://localhost:8080`:
+
+```bash
+# Health
+curl -s http://localhost:8080/health | jq
+
+# Signup
+curl -s -X POST http://localhost:8080/api/v1/signup \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "email": "smoke@example.com",
+    "password": "SecurePass123!",
+    "confirm_password": "SecurePass123!",
+    "first_name": "Smoke",
+    "last_name": "Test"
+  }' | jq
+
+# Login (copy access_token from response)
+curl -s -X POST http://localhost:8080/api/v1/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"smoke@example.com","password":"SecurePass123!"}' | jq
+```
+
+Paste the `access_token` into [jwt.io](https://jwt.io) (debugger only — do not paste production secrets). Verify:
+
+- Algorithm: `HS256`
+- Claim `sub`: user UUID from signup response
+- Claim `exp`: future unix timestamp

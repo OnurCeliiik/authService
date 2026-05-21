@@ -20,20 +20,24 @@ type UserRepository interface {
 }
 
 type authService struct {
-	repo UserRepository
+	repo   UserRepository
+	jwtCfg jwt.Config
 }
 
-func NewAuthService(repo UserRepository) *authService {
-	return &authService{repo: repo}
+func NewAuthService(repo UserRepository, jwtCfg jwt.Config) *authService {
+	return &authService{repo: repo, jwtCfg: jwtCfg}
 }
 
 var _ UserService = (*authService)(nil)
 
 func (s *authService) Signup(ctx context.Context, input *SignupInput) (*SignupResponse, error) {
 
-	// check if email is already taken. If existing returns not nil, that means email is already taken.
 	existing, err := s.repo.FindUserByEmail(ctx, input.Email)
-	if err == nil && existing != nil {
+	if err != nil {
+		if !errors.Is(err, ErrUserNotFound) {
+			return nil, err
+		}
+	} else if existing != nil {
 		return nil, ErrEmailTaken
 	}
 
@@ -77,7 +81,7 @@ func (s *authService) Login(ctx context.Context, input *LoginInput) (*LoginRespo
 		return nil, ErrInvalidCredentials
 	}
 
-	token, expiresAt, err := jwt.Generate(user.ID)
+	token, expiresAt, err := jwt.Generate(user.ID, s.jwtCfg)
 	if err != nil {
 		return nil, err
 	}

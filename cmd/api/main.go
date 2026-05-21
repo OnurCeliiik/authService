@@ -4,7 +4,9 @@ import (
 	"authService/internal/auth"
 	"authService/internal/config"
 	"authService/internal/database"
+	"authService/internal/health"
 	"authService/internal/routes"
+	"authService/utils/jwt"
 	"fmt"
 	"log"
 
@@ -17,7 +19,7 @@ func main() {
 
 	// Load environment variables
 	if err := godotenv.Load(); err != nil {
-		log.Fatal("failed to load environment variables: ", err)
+		log.Println("failed to load environment variables: ", err)
 	}
 
 	// Load configuration
@@ -40,11 +42,12 @@ func main() {
 	}
 
 	repo := auth.NewUserRepository(db)
-	svc := auth.NewAuthService(repo)
-	handler := auth.NewAuthHandler(svc)
+	svc := auth.NewAuthService(repo, jwt.Config{Secret: []byte(cfg.JWTSecret), TTL: cfg.JWTTTL})
+	authHandler := auth.NewAuthHandler(svc)
+	healthHandler := health.NewHandler(db)
 
 	router := gin.Default()
-	routes.SetupRoutes(router, handler)
+	routes.SetupRoutes(router, healthHandler, authHandler)
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	log.Println("listening on port", addr)
