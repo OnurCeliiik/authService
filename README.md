@@ -57,34 +57,3 @@ Environment variables (see `.env.example`):
 | GET | `/health` | Liveness + DB ping |
 | POST | `/api/v1/signup` | Register with email/password |
 | POST | `/api/v1/login` | Issue Bearer access token |
-
-#### Smoke test (signup → login → JWT)
-
-With the API running on `http://localhost:8080`:
-
-```bash
-# Health
-curl -s http://localhost:8080/health | jq
-
-# Signup
-curl -s -X POST http://localhost:8080/api/v1/signup \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "email": "smoke@example.com",
-    "password": "SecurePass123!",
-    "confirm_password": "SecurePass123!",
-    "first_name": "Smoke",
-    "last_name": "Test"
-  }' | jq
-
-# Login (copy access_token from response)
-curl -s -X POST http://localhost:8080/api/v1/login \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"smoke@example.com","password":"SecurePass123!"}' | jq
-```
-
-Paste the `access_token` into [jwt.io](https://jwt.io) (debugger only — do not paste production secrets). Verify:
-
-- Algorithm: `HS256`
-- Claim `sub`: user UUID from signup response
-- Claim `exp`: future unix timestamp
