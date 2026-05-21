@@ -34,11 +34,11 @@ An authentication service written in Go
 
 ```bash
 cp .env.example .env
-docker compose up -d          # Postgres only
-go run ./cmd/api              # API on host
+docker compose up -d          
+go run ./cmd/api              
 
-# Or run Postgres + API in Docker:
-docker compose up -d --build
+# Or run it via Makefile command:
+make up 
 ```
 
 Environment variables (see `.env.example`):
