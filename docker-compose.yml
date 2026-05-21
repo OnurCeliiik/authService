@@ -23,7 +23,12 @@ services:
     ports:
       - 5434:5432
     volumes:
-      - postgres_data:/var/lib/postgresql/test_data
+      - test_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d auth_service_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   api:
     build: .
@@ -40,3 +45,4 @@ services:
 
 volumes:
   postgres_data:
+  test_postgres_data:
