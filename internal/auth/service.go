@@ -10,9 +10,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-const bcryptCost = 12
-
-// Business logic and validation
+const (
+	bcryptCost = 12
+)
 
 type UserRepository interface {
 	CreateUser(ctx context.Context, user *User) error

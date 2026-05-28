@@ -46,15 +46,16 @@ func TestMain(m *testing.M) {
 	}
 
 	repo := auth.NewUserRepository(testDB)
-	svc := auth.NewAuthService(repo, jwt.Config{
+	jwtCfg := jwt.Config{
 		Secret: []byte(os.Getenv("JWT_SECRET")),
 		TTL:    mustParseDuration(os.Getenv("JWT_TTL")),
-	})
+	}
+	svc := auth.NewAuthService(repo, jwtCfg)
 	authHandler := auth.NewAuthHandler(svc)
 	healthHandler := health.NewHandler(testDB)
 
 	testRouter = gin.Default()
-	routes.SetupRoutes(testRouter, healthHandler, authHandler)
+	routes.SetupRoutes(testRouter, healthHandler, authHandler, jwtCfg)
 
 	code := m.Run()
 	os.Exit(code)

@@ -1,7 +1,7 @@
 package jwt
 
 import (
-	"fmt"
+	"errors"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -13,78 +13,64 @@ type Config struct {
 	TTL    time.Duration
 }
 
-// Generate builds a signed access token for the user. Reads JWT_SECRET and JWT_TTL from the environment.
-func Generate(userID uuid.UUID, cfg Config) (token string, expiresAt time.Time, err error) {
-	expiresAt = time.Now().Add(cfg.TTL)
+var (
+	ErrInvalidToken = errors.New("invalid token")
+	ErrExpiredToken = errors.New("expired token")
+)
 
-	t := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub": userID.String(),
-		"exp": expiresAt.Unix(),
-	})
+type Claims struct {
+	UserID uuid.UUID
+}
+
+func Generate(userID uuid.UUID, cfg Config) (string, time.Time, error) {
+	expiresAt := time.Now().Add(cfg.TTL)
+
+	t := jwt.NewWithClaims(
+		jwt.SigningMethodHS256,
+		jwt.MapClaims{
+			"sub": userID.String(),
+			"exp": expiresAt.Unix(),
+			"iat": time.Now().Unix(),
+		},
+	)
 
 	signed, err := t.SignedString(cfg.Secret)
-	return signed, expiresAt, err
+	if err != nil {
+		return "", time.Time{}, err
+	}
+
+	return signed, expiresAt, nil
+}
+
+func ParseAndValidate(cfg Config, token string) (*Claims, error) {
+	t, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, ErrInvalidToken
+		}
+		return cfg.Secret, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	claims, ok := t.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, ErrInvalidToken
+	}
+
+	userID, err := uuid.Parse(claims["sub"].(string))
+	if err != nil {
+		return nil, ErrInvalidToken
+	}
+
+	return &Claims{UserID: userID}, nil
 }
 
 func Validate(cfg Config, token string) (uuid.UUID, error) {
-	t, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return cfg.Secret, nil
-	})
+	claims, err := ParseAndValidate(cfg, token)
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("failed to parse token: %w", err)
+		return uuid.UUID{}, err
 	}
 
-	claims, ok := t.Claims.(jwt.MapClaims)
-	if !ok {
-		return uuid.Nil, fmt.Errorf("invalid token claims")
-	}
-
-	sub, ok := claims["sub"].(string)
-
-	if !ok {
-		return uuid.Nil, fmt.Errorf("invalid token claims")
-	}
-
-	userID, err := uuid.Parse(sub)
-
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("invalid user ID: %w", err)
-	}
-
-	return userID, nil
-}
-
-func Parse(cfg Config, token string) (uuid.UUID, error) {
-	t, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return cfg.Secret, nil
-	})
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("failed to parse token: %w", err)
-	}
-
-	claims, ok := t.Claims.(jwt.MapClaims)
-
-	if !ok {
-		return uuid.Nil, fmt.Errorf("invalid token")
-	}
-
-	sub, ok := claims["sub"].(string)
-
-	if !ok {
-		return uuid.Nil, fmt.Errorf("invalid token claims")
-	}
-
-	userID, err := uuid.Parse(sub)
-
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("invalid user ID: %w", err)
-	}
-
-	return userID, nil
+	return claims.UserID, nil
 }

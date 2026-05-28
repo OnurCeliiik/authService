@@ -90,3 +90,15 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	c.JSON(http.StatusOK, resp)
 }
+
+func (h *AuthHandler) Me(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"user_id": userID,
+	})
+}
