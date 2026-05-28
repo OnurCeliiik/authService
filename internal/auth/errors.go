@@ -11,4 +11,5 @@ var (
 	ErrInternal           = errors.New("internal server error")
 	ErrInvalidToken       = errors.New("invalid token")
 	ErrTokenExpired       = errors.New("token expired")
+	ErrResetTokenNotFound = errors.New("password reset token not found")
 )

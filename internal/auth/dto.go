@@ -46,3 +46,32 @@ type LoginResponse struct {
 	TokenType   string `json:"token_type"`
 	ExpiresIn   int64  `json:"expires_in"`
 }
+
+type ResetPasswordRequest struct {
+	NewPassword        string `json:"new_password" binding:"required,min=6"`
+	ConfirmNewPassword string `json:"confirm_new_password" binding:"required"`
+	Token              string `json:"token" binding:"required"`
+}
+
+type ResetPasswordInput struct {
+	NewPassword string
+	Token       string
+}
+
+type ResetPasswordResponse struct {
+	Success bool `json:"success"`
+}
+
+type ForgotPasswordRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+type ForgotPasswordInput struct {
+	Email string
+}
+
+type ForgotPasswordResponse struct {
+	Success    bool   `json:"success"`
+	ResetToken string `json:"reset_token"`
+	ExpiresIn  int64  `json:"expires_in"`
+}

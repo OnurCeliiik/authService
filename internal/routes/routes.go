@@ -23,6 +23,8 @@ func SetupRoutes(
 		authRateLimit := middleware.RateLimitByIP(20, time.Minute)
 		v1.POST("/signup", authRateLimit, authHandler.Signup)
 		v1.POST("/login", authRateLimit, authHandler.Login)
+		v1.POST("/reset-password", authRateLimit, authHandler.ResetPassword)
+		v1.POST("/forgot-password", authRateLimit, authHandler.ForgotPassword)
 
 		protected := v1.Group("")
 		protected.Use(middleware.AuthMiddleware(jwtCfg))

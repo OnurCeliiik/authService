@@ -42,5 +42,6 @@ func Ping(db *gorm.DB) error {
 func AutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&auth.User{},
+		&auth.PasswordResetToken{},
 	)
 }

@@ -14,6 +14,8 @@ import (
 type UserService interface {
 	Signup(ctx context.Context, input *SignupInput) (*SignupResponse, error)
 	Login(ctx context.Context, input *LoginInput) (*LoginResponse, error)
+	ResetPassword(ctx context.Context, input *ResetPasswordInput) (*ResetPasswordResponse, error)
+	ForgotPassword(ctx context.Context, input *ForgotPasswordInput) (*ForgotPasswordResponse, error)
 }
 
 type AuthHandler struct {
@@ -101,4 +103,56 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"user_id": userID,
 	})
+}
+
+func (h *AuthHandler) ResetPassword(c *gin.Context) {
+	var req ResetPasswordRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.NewPassword != req.ConfirmNewPassword {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "passwords do not match"})
+		return
+	}
+
+	resp, err := h.service.ResetPassword(c.Request.Context(), &ResetPasswordInput{
+		NewPassword: req.NewPassword,
+		Token:       req.Token,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidToken):
+			log.Println("invalid reset token: ", err)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+		default:
+			log.Println("internal server error: ", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+func (h *AuthHandler) ForgotPassword(c *gin.Context) {
+	var req ForgotPasswordRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	resp, err := h.service.ForgotPassword(c.Request.Context(), &ForgotPasswordInput{
+		Email: req.Email,
+	})
+	if err != nil {
+		log.Println("internal server error: ", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
