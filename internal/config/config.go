@@ -3,16 +3,18 @@ package config
 import (
 	"log"
 	"os"
+	"strings"
 	"time"
 )
 
 // Environment variables and configuration management
 
 type Config struct {
-	Port        string
-	DatabaseURL string
-	JWTSecret   string
-	JWTTTL      time.Duration
+	Port             string
+	DatabaseURL      string
+	JWTSecret        string
+	JWTTTL           time.Duration
+	ExposeResetToken bool
 }
 
 func LoadConfig() Config {
@@ -40,10 +42,16 @@ func LoadConfig() Config {
 		log.Fatal("invalid JWT_TTL: ", err)
 	}
 
+	exposeResetToken := strings.EqualFold(os.Getenv("EXPOSE_RESET_TOKEN"), "true")
+	if !exposeResetToken && strings.EqualFold(os.Getenv("APP_ENV"), "development") {
+		exposeResetToken = true
+	}
+
 	return Config{
-		Port:        port,
-		DatabaseURL: databaseURL,
-		JWTSecret:   secret,
-		JWTTTL:      ttl,
+		Port:             port,
+		DatabaseURL:      databaseURL,
+		JWTSecret:        secret,
+		JWTTTL:           ttl,
+		ExposeResetToken: exposeResetToken,
 	}
 }

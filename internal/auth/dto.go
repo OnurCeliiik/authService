@@ -72,6 +72,6 @@ type ForgotPasswordInput struct {
 
 type ForgotPasswordResponse struct {
 	Success    bool   `json:"success"`
-	ResetToken string `json:"reset_token"`
-	ExpiresIn  int64  `json:"expires_in"`
+	ResetToken string `json:"reset_token,omitempty"`
+	ExpiresIn  int64  `json:"expires_in,omitempty"`
 }

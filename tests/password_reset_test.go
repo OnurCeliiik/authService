@@ -3,6 +3,7 @@ package tests
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -105,5 +106,49 @@ func TestPasswordReset_rejectsUsedToken(t *testing.T) {
 	})
 	if secondReset.Code != http.StatusUnauthorized {
 		t.Fatalf("second reset status = %d, want %d", secondReset.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestPasswordReset_invalidatesExistingJWT(t *testing.T) {
+	email := "reset-jwt-" + uuid.NewString() + "@test.com"
+	password := "old-password"
+	newPassword := "new-password"
+
+	signup := postJSON(t, "/api/v1/signup", map[string]string{
+		"email": email, "password": password, "confirm_password": password,
+		"first_name": "Test", "last_name": "User",
+	})
+	if signup.Code != http.StatusCreated {
+		t.Fatalf("signup failed: %d", signup.Code)
+	}
+
+	login := postJSON(t, "/api/v1/login", map[string]string{
+		"email": email, "password": password,
+	})
+	var loginResp struct {
+		AccessToken string `json:"access_token"`
+	}
+	_ = json.NewDecoder(login.Body).Decode(&loginResp)
+
+	forgot := postJSON(t, "/api/v1/forgot-password", map[string]string{"email": email})
+	var forgotResp struct {
+		ResetToken string `json:"reset_token"`
+	}
+	_ = json.NewDecoder(forgot.Body).Decode(&forgotResp)
+
+	reset := postJSON(t, "/api/v1/reset-password", map[string]string{
+		"token": forgotResp.ResetToken, "new_password": newPassword, "confirm_new_password": newPassword,
+	})
+	if reset.Code != http.StatusOK {
+		t.Fatalf("reset failed: %d", reset.Code)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+	req.Header.Set("Authorization", "Bearer "+loginResp.AccessToken)
+	w := httptest.NewRecorder()
+	testRouter.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("old JWT should be rejected, got %d body=%s", w.Code, w.Body.String())
 	}
 }

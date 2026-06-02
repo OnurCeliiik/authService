@@ -54,6 +54,10 @@ Environment variables (see `.env.example`):
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/health` | Liveness + DB ping |
-| POST | `/api/v1/signup` | Register with email/password |
-| POST | `/api/v1/login` | Issue Bearer access token |
+| GET | `/health` | No | Liveness + DB ping |
+| POST | `/api/v1/signup` | No | Register with email/password |
+| POST | `/api/v1/login` | No | Issue Bearer access token |
+| POST | `/api/v1/forgot-password` | No | Start password reset (`reset_token` only if `EXPOSE_RESET_TOKEN=true`) |
+| POST | `/api/v1/reset-password` | No | Set new password with reset token |
+| GET | `/api/v1/me` | Bearer JWT | Current user id from token |
+

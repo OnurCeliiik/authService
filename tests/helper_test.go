@@ -29,6 +29,7 @@ func TestMain(m *testing.M) {
 	os.Setenv("DATABASE_URL", "postgres://postgres:postgres@localhost:5434/auth_service_test?sslmode=disable")
 	os.Setenv("JWT_SECRET", "test-secret-key-32-chars-long")
 	os.Setenv("JWT_TTL", "1h")
+	os.Setenv("EXPOSE_RESET_TOKEN", "true")
 
 	var err error
 
@@ -50,12 +51,12 @@ func TestMain(m *testing.M) {
 		Secret: []byte(os.Getenv("JWT_SECRET")),
 		TTL:    mustParseDuration(os.Getenv("JWT_TTL")),
 	}
-	svc := auth.NewAuthService(repo, jwtCfg)
+	svc := auth.NewAuthService(repo, jwtCfg, true)
 	authHandler := auth.NewAuthHandler(svc)
 	healthHandler := health.NewHandler(testDB)
 
 	testRouter = gin.Default()
-	routes.SetupRoutes(testRouter, healthHandler, authHandler, jwtCfg)
+	routes.SetupRoutes(testRouter, healthHandler, authHandler, jwtCfg, repo)
 
 	code := m.Run()
 	os.Exit(code)

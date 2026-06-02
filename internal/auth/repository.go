@@ -84,3 +84,30 @@ func (r *userRepository) MarkPasswordResetTokenUsed(ctx context.Context, tokenID
 		Where("id = ? AND used_at IS NULL", tokenID).
 		Update("used_at", usedAt).Error
 }
+
+func (r *userRepository) GetUserTokenVersion(ctx context.Context, userID uuid.UUID) (int, error) {
+	var user User
+	err := r.db.WithContext(ctx).
+		Select("token_version").
+		Where("id = ?", userID).
+		First(&user).Error
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, ErrUserNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+	return user.TokenVersion, nil
+}
+
+func (r *userRepository) InvalidateUnusedPasswordResetTokensForUser(
+	ctx context.Context,
+	userID uuid.UUID,
+	usedAt time.Time,
+) error {
+	return r.db.WithContext(ctx).
+		Model(&PasswordResetToken{}).
+		Where("user_id = ? AND used_at IS NULL", userID).
+		Update("used_at", usedAt).Error
+}

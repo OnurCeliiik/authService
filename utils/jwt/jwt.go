@@ -19,16 +19,18 @@ var (
 )
 
 type Claims struct {
-	UserID uuid.UUID
+	UserID       uuid.UUID
+	TokenVersion int
 }
 
-func Generate(userID uuid.UUID, cfg Config) (string, time.Time, error) {
+func Generate(userID uuid.UUID, tokenVersion int, cfg Config) (string, time.Time, error) {
 	expiresAt := time.Now().Add(cfg.TTL)
 
 	t := jwt.NewWithClaims(
 		jwt.SigningMethodHS256,
 		jwt.MapClaims{
 			"sub": userID.String(),
+			"ver": tokenVersion,
 			"exp": expiresAt.Unix(),
 			"iat": time.Now().Unix(),
 		},
@@ -50,27 +52,68 @@ func ParseAndValidate(cfg Config, token string) (*Claims, error) {
 		return cfg.Secret, nil
 	})
 	if err != nil {
-		return nil, err
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return nil, ErrExpiredToken
+		}
+		return nil, ErrInvalidToken
 	}
 
-	claims, ok := t.Claims.(jwt.MapClaims)
+	if !t.Valid {
+		return nil, ErrInvalidToken
+	}
+
+	mapClaims, ok := t.Claims.(jwt.MapClaims)
 	if !ok {
 		return nil, ErrInvalidToken
 	}
 
-	userID, err := uuid.Parse(claims["sub"].(string))
+	sub, err := claimString(mapClaims, "sub")
+	if err != nil {
+		return nil, err
+	}
+
+	userID, err := uuid.Parse(sub)
 	if err != nil {
 		return nil, ErrInvalidToken
 	}
 
-	return &Claims{UserID: userID}, nil
-}
-
-func Validate(cfg Config, token string) (uuid.UUID, error) {
-	claims, err := ParseAndValidate(cfg, token)
+	ver, err := claimInt(mapClaims, "ver")
 	if err != nil {
-		return uuid.UUID{}, err
+		return nil, err
 	}
 
-	return claims.UserID, nil
+	return &Claims{
+		UserID:       userID,
+		TokenVersion: ver,
+	}, nil
+}
+
+func claimString(claims jwt.MapClaims, key string) (string, error) {
+	raw, ok := claims[key]
+	if !ok {
+		return "", ErrInvalidToken
+	}
+	s, ok := raw.(string)
+	if !ok || s == "" {
+		return "", ErrInvalidToken
+	}
+	return s, nil
+}
+
+func claimInt(claims jwt.MapClaims, key string) (int, error) {
+	raw, ok := claims[key]
+	if !ok {
+		return 0, ErrInvalidToken
+	}
+
+	switch v := raw.(type) {
+	case float64:
+		return int(v), nil
+	case int:
+		return v, nil
+	case int64:
+		return int(v), nil
+	default:
+		return 0, ErrInvalidToken
+	}
 }

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"authService/internal/middleware"
 	"context"
 	"errors"
 	"log"
@@ -94,7 +95,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 }
 
 func (h *AuthHandler) Me(c *gin.Context) {
-	userID, exists := c.Get("userID")
+	userID, exists := c.Get(middleware.ContextKeyUserID)
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 		return

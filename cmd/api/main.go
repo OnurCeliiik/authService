@@ -43,12 +43,12 @@ func main() {
 
 	repo := auth.NewUserRepository(db)
 	jwtCfg := jwt.Config{Secret: []byte(cfg.JWTSecret), TTL: cfg.JWTTTL}
-	svc := auth.NewAuthService(repo, jwtCfg)
+	svc := auth.NewAuthService(repo, jwtCfg, cfg.ExposeResetToken)
 	authHandler := auth.NewAuthHandler(svc)
 	healthHandler := health.NewHandler(db)
 
 	router := gin.Default()
-	routes.SetupRoutes(router, healthHandler, authHandler, jwtCfg)
+	routes.SetupRoutes(router, healthHandler, authHandler, jwtCfg, repo)
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	log.Println("listening on port", addr)

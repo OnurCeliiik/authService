@@ -1,10 +1,10 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"context"
 	"errors"
 	"time"
 
@@ -27,21 +27,27 @@ type UserRepository interface {
 	CreatePasswordResetToken(ctx context.Context, token *PasswordResetToken) error
 	FindValidPasswordResetToken(ctx context.Context, tokenHash string) (*PasswordResetToken, error)
 	MarkPasswordResetTokenUsed(ctx context.Context, tokenID uuid.UUID, usedAt time.Time) error
+	InvalidateUnusedPasswordResetTokensForUser(ctx context.Context, userID uuid.UUID, usedAt time.Time) error
+	GetUserTokenVersion(ctx context.Context, userID uuid.UUID) (int, error)
 }
 
 type authService struct {
-	repo   UserRepository
-	jwtCfg jwt.Config
+	repo             UserRepository
+	jwtCfg           jwt.Config
+	exposeResetToken bool
 }
 
-func NewAuthService(repo UserRepository, jwtCfg jwt.Config) *authService {
-	return &authService{repo: repo, jwtCfg: jwtCfg}
+func NewAuthService(repo UserRepository, jwtCfg jwt.Config, exposeResetToken bool) *authService {
+	return &authService{
+		repo:             repo,
+		jwtCfg:           jwtCfg,
+		exposeResetToken: exposeResetToken,
+	}
 }
 
 var _ UserService = (*authService)(nil)
 
 func (s *authService) Signup(ctx context.Context, input *SignupInput) (*SignupResponse, error) {
-
 	existing, err := s.repo.FindUserByEmail(ctx, input.Email)
 	if err != nil {
 		if !errors.Is(err, ErrUserNotFound) {
@@ -61,6 +67,7 @@ func (s *authService) Signup(ctx context.Context, input *SignupInput) (*SignupRe
 		PasswordHash: string(hash),
 		FirstName:    input.Firstname,
 		LastName:     input.Lastname,
+		TokenVersion: 0,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
@@ -91,7 +98,7 @@ func (s *authService) Login(ctx context.Context, input *LoginInput) (*LoginRespo
 		return nil, ErrInvalidCredentials
 	}
 
-	token, expiresAt, err := jwt.Generate(user.ID, s.jwtCfg)
+	token, expiresAt, err := jwt.Generate(user.ID, user.TokenVersion, s.jwtCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -123,20 +130,20 @@ func (s *authService) ResetPassword(ctx context.Context, input *ResetPasswordInp
 		return nil, err
 	}
 
+	now := time.Now()
 	user.PasswordHash = string(hash)
-	user.UpdatedAt = time.Now()
+	user.TokenVersion++
+	user.UpdatedAt = now
 
 	if err := s.repo.UpdateUser(ctx, user); err != nil {
 		return nil, err
 	}
 
-	if err := s.repo.MarkPasswordResetTokenUsed(ctx, resetToken.ID, time.Now()); err != nil {
+	if err := s.repo.MarkPasswordResetTokenUsed(ctx, resetToken.ID, now); err != nil {
 		return nil, err
 	}
 
-	return &ResetPasswordResponse{
-		Success: true,
-	}, nil
+	return &ResetPasswordResponse{Success: true}, nil
 }
 
 func (s *authService) ForgotPassword(ctx context.Context, input *ForgotPasswordInput) (*ForgotPasswordResponse, error) {
@@ -148,12 +155,17 @@ func (s *authService) ForgotPassword(ctx context.Context, input *ForgotPasswordI
 		return nil, err
 	}
 
+	now := time.Now()
+	if err := s.repo.InvalidateUnusedPasswordResetTokensForUser(ctx, user.ID, now); err != nil {
+		return nil, err
+	}
+
 	rawToken, err := generateResetToken()
 	if err != nil {
 		return nil, err
 	}
 
-	expiresAt := time.Now().Add(passwordResetTokenTTL)
+	expiresAt := now.Add(passwordResetTokenTTL)
 	resetToken := &PasswordResetToken{
 		UserID:    user.ID,
 		TokenHash: hashResetToken(rawToken),
@@ -163,11 +175,14 @@ func (s *authService) ForgotPassword(ctx context.Context, input *ForgotPasswordI
 		return nil, err
 	}
 
-	return &ForgotPasswordResponse{
-		Success:    true,
-		ResetToken: rawToken,
-		ExpiresIn:  int64(time.Until(expiresAt).Seconds()),
-	}, nil
+	resp := &ForgotPasswordResponse{Success: true}
+	if s.exposeResetToken {
+		resp.ResetToken = rawToken
+		resp.ExpiresIn = int64(time.Until(expiresAt).Seconds())
+	}
+	// TODO Phase 2: send rawToken by email instead of returning it.
+
+	return resp, nil
 }
 
 func generateResetToken() (string, error) {

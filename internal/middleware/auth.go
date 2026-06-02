@@ -1,16 +1,24 @@
 package middleware
 
 import (
-	"authService/utils/jwt"
+	"context"
+	"errors"
 	"net/http"
 	"strings"
 
+	"authService/utils/jwt"
+
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 const ContextKeyUserID = "userID"
 
-func AuthMiddleware(cfg jwt.Config) gin.HandlerFunc {
+type TokenVersionChecker interface {
+	GetUserTokenVersion(ctx context.Context, userID uuid.UUID) (int, error)
+}
+
+func AuthMiddleware(cfg jwt.Config, versions TokenVersionChecker) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := strings.TrimSpace(c.GetHeader("Authorization"))
 		if authHeader == "" {
@@ -35,6 +43,18 @@ func AuthMiddleware(cfg jwt.Config) gin.HandlerFunc {
 
 		claims, err := jwt.ParseAndValidate(cfg, rawToken)
 		if err != nil {
+			if errors.Is(err, jwt.ErrExpiredToken) {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "token expired"})
+				c.Abort()
+				return
+			}
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+			c.Abort()
+			return
+		}
+
+		currentVersion, err := versions.GetUserTokenVersion(c.Request.Context(), claims.UserID)
+		if err != nil || currentVersion != claims.TokenVersion {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 			c.Abort()
 			return
