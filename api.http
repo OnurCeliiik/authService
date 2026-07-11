@@ -1,0 +1,66 @@
+@baseUrl = http://localhost:8080
+@email = test@example.com
+@password = password123
+@newPassword = newpassword123
+@accessToken = {{login.response.body.access_token}}
+@resetToken = {{forgotPassword.response.body.reset_token}}
+
+### Health
+GET {{baseUrl}}/health
+
+### Signup
+POST {{baseUrl}}/api/v1/signup
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}",
+  "confirm_password": "{{password}}",
+  "first_name": "Test",
+  "last_name": "User"
+}
+
+### Login
+# @name login
+POST {{baseUrl}}/api/v1/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### Me (requires access token from Login)
+# Returns id, email, first_name, last_name, created_at
+GET {{baseUrl}}/api/v1/me
+Authorization: Bearer {{accessToken}}
+
+### Forgot password
+# @name forgotPassword
+POST {{baseUrl}}/api/v1/forgot-password
+Content-Type: application/json
+
+{
+  "email": "{{email}}"
+}
+
+### Reset password
+# Uses reset_token from Forgot password when EXPOSE_RESET_TOKEN=true.
+# Otherwise copy the token from Mailpit (http://localhost:8025) into @resetToken.
+POST {{baseUrl}}/api/v1/reset-password
+Content-Type: application/json
+
+{
+  "token": "{{resetToken}}",
+  "new_password": "{{newPassword}}",
+  "confirm_new_password": "{{newPassword}}"
+}
+
+### Login with new password (after reset)
+POST {{baseUrl}}/api/v1/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{newPassword}}"
+}

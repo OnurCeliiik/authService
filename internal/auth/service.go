@@ -8,6 +8,7 @@ import (
 	"errors"
 	"time"
 
+	"authService/internal/email"
 	"authService/utils/jwt"
 
 	"github.com/google/uuid"
@@ -35,13 +36,23 @@ type authService struct {
 	repo             UserRepository
 	jwtCfg           jwt.Config
 	exposeResetToken bool
+	emailSender      email.Sender
+	appBaseURL       string
 }
 
-func NewAuthService(repo UserRepository, jwtCfg jwt.Config, exposeResetToken bool) *authService {
+func NewAuthService(
+	repo UserRepository,
+	jwtCfg jwt.Config,
+	exposeResetToken bool,
+	emailSender email.Sender,
+	appBaseURL string,
+) *authService {
 	return &authService{
 		repo:             repo,
 		jwtCfg:           jwtCfg,
 		exposeResetToken: exposeResetToken,
+		emailSender:      emailSender,
+		appBaseURL:       appBaseURL,
 	}
 }
 
@@ -110,6 +121,21 @@ func (s *authService) Login(ctx context.Context, input *LoginInput) (*LoginRespo
 	}, nil
 }
 
+func (s *authService) Me(ctx context.Context, userID uuid.UUID) (*MeResponse, error) {
+	user, err := s.repo.FindUserByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &MeResponse{
+		ID:        user.ID,
+		Email:     user.Email,
+		FirstName: user.FirstName,
+		LastName:  user.LastName,
+		CreatedAt: user.CreatedAt,
+	}, nil
+}
+
 func (s *authService) ResetPassword(ctx context.Context, input *ResetPasswordInput) (*ResetPasswordResponse, error) {
 	tokenHash := hashResetToken(input.Token)
 	resetToken, err := s.repo.FindValidPasswordResetToken(ctx, tokenHash)
@@ -175,12 +201,16 @@ func (s *authService) ForgotPassword(ctx context.Context, input *ForgotPasswordI
 		return nil, err
 	}
 
+	resetURL := s.appBaseURL + "/reset-password?token=" + rawToken
+	if err := s.emailSender.SendPasswordReset(ctx, user.Email, resetURL); err != nil {
+		return nil, err
+	}
+
 	resp := &ForgotPasswordResponse{Success: true}
 	if s.exposeResetToken {
 		resp.ResetToken = rawToken
 		resp.ExpiresIn = int64(time.Until(expiresAt).Seconds())
 	}
-	// TODO Phase 2: send rawToken by email instead of returning it.
 
 	return resp, nil
 }

@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // Gin HTTP adapter layer
@@ -17,6 +18,7 @@ type UserService interface {
 	Login(ctx context.Context, input *LoginInput) (*LoginResponse, error)
 	ResetPassword(ctx context.Context, input *ResetPasswordInput) (*ResetPasswordResponse, error)
 	ForgotPassword(ctx context.Context, input *ForgotPasswordInput) (*ForgotPasswordResponse, error)
+	Me(ctx context.Context, userID uuid.UUID) (*MeResponse, error)
 }
 
 type AuthHandler struct {
@@ -95,15 +97,37 @@ func (h *AuthHandler) Login(c *gin.Context) {
 }
 
 func (h *AuthHandler) Me(c *gin.Context) {
-	userID, exists := c.Get(middleware.ContextKeyUserID)
+	rawUserID, exists := c.Get(middleware.ContextKeyUserID)
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"user_id": userID,
-	})
+	userIDStr, ok := rawUserID.(string)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+		return
+	}
+
+	resp, err := h.service.Me(c.Request.Context(), userID)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrUserNotFound):
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+		default:
+			log.Println("internal server error: ", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *AuthHandler) ResetPassword(c *gin.Context) {

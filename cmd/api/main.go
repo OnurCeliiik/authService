@@ -4,6 +4,7 @@ import (
 	"authService/internal/auth"
 	"authService/internal/config"
 	"authService/internal/database"
+	"authService/internal/email"
 	"authService/internal/health"
 	"authService/internal/routes"
 	"authService/utils/jwt"
@@ -41,9 +42,22 @@ func main() {
 		log.Fatal("failed to auto migrate database: ", err)
 	}
 
+	var mail email.Sender
+	if cfg.Email.SMTPHost != "" {
+		mail = email.NewSMTPSender(
+			cfg.Email.SMTPHost,
+			cfg.Email.SMTPPort,
+			cfg.Email.SMTPFrom,
+		)
+		log.Println("email: using SMTP at", cfg.Email.SMTPHost+":"+cfg.Email.SMTPPort)
+	} else {
+		mail = email.NewLogSender()
+		log.Println("email: using log sender (SMTP_HOST not set)")
+	}
+
 	repo := auth.NewUserRepository(db)
 	jwtCfg := jwt.Config{Secret: []byte(cfg.JWTSecret), TTL: cfg.JWTTTL}
-	svc := auth.NewAuthService(repo, jwtCfg, cfg.ExposeResetToken)
+	svc := auth.NewAuthService(repo, jwtCfg, cfg.ExposeResetToken, mail, cfg.AppBaseURL)
 	authHandler := auth.NewAuthHandler(svc)
 	healthHandler := health.NewHandler(db)
 

@@ -30,6 +30,12 @@ services:
       timeout: 5s
       retries: 5
 
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025" # SMTP - app sends here
+      - "8025:8025" # Web UI - for email inspection
+
   api:
     build: .
     ports:
@@ -39,9 +45,16 @@ services:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/auth_service?sslmode=disable
       JWT_SECRET: dev-only-change-me-in-production
       JWT_TTL: 24h
+      APP_BASE_URL: http://localhost:8080
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_FROM: noreply@authservice.local
+      EXPOSE_RESET_TOKEN: "false"
     depends_on:
       postgres:
         condition: service_healthy
+      mailpit:
+        condition: service_started
 
 volumes:
   postgres_data:

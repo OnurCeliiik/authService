@@ -49,13 +49,22 @@ func TestMe_success(t *testing.T) {
 	}
 
 	var meResp struct {
-		UserID string `json:"user_id"`
+		ID        string `json:"id"`
+		Email     string `json:"email"`
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name"`
 	}
 	if err := json.NewDecoder(w.Body).Decode(&meResp); err != nil {
 		t.Fatal(err)
 	}
-	if meResp.UserID == "" {
-		t.Fatal("expected user_id in response")
+	if meResp.ID == "" {
+		t.Fatal("expected id in response")
+	}
+	if meResp.Email != email {
+		t.Fatalf("email = %q, want %q", meResp.Email, email)
+	}
+	if meResp.FirstName != "Test" || meResp.LastName != "User" {
+		t.Fatalf("unexpected name: %+v", meResp)
 	}
 }
 

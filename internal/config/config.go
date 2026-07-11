@@ -15,6 +15,14 @@ type Config struct {
 	JWTSecret        string
 	JWTTTL           time.Duration
 	ExposeResetToken bool
+	AppBaseURL       string
+	Email            EmailConfig
+}
+
+type EmailConfig struct {
+	SMTPHost string
+	SMTPPort string
+	SMTPFrom string
 }
 
 func LoadConfig() Config {
@@ -47,11 +55,32 @@ func LoadConfig() Config {
 		exposeResetToken = true
 	}
 
+	appBaseURL := os.Getenv("APP_BASE_URL")
+	if appBaseURL == "" {
+		appBaseURL = "http://localhost:" + port
+	}
+
+	smtpHost := os.Getenv("SMTP_HOST")
+	smtpPort := os.Getenv("SMTP_PORT")
+	if smtpPort == "" {
+		smtpPort = "1025"
+	}
+	smtpFrom := os.Getenv("SMTP_FROM")
+	if smtpFrom == "" {
+		smtpFrom = "noreply@authservice.local"
+	}
+
 	return Config{
 		Port:             port,
 		DatabaseURL:      databaseURL,
 		JWTSecret:        secret,
 		JWTTTL:           ttl,
 		ExposeResetToken: exposeResetToken,
+		AppBaseURL:       appBaseURL,
+		Email: EmailConfig{
+			SMTPHost: smtpHost,
+			SMTPPort: smtpPort,
+			SMTPFrom: smtpFrom,
+		},
 	}
 }

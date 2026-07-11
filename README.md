@@ -49,15 +49,22 @@ Environment variables (see `.env.example`):
 | `DATABASE_URL` | Postgres DSN |
 | `JWT_SECRET` | HMAC secret for access tokens |
 | `JWT_TTL` | Token lifetime (e.g. `24h`) |
+| `APP_BASE_URL` | Base URL used in password-reset email links |
+| `SMTP_HOST` | SMTP host (empty = log emails instead of sending) |
+| `SMTP_PORT` | SMTP port (default `1025`) |
+| `SMTP_FROM` | From address for outbound mail |
+| `EXPOSE_RESET_TOKEN` | If `true`, include `reset_token` in forgot-password JSON (dev/tests only) |
+
+Local mail: `docker compose up -d mailpit` then open [http://localhost:8025](http://localhost:8025) to inspect password-reset emails. Manual API checks: `api.http`.
 
 #### API (v1)
 
-| Method | Path | Description |
-|--------|------|-------------|
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
 | GET | `/health` | No | Liveness + DB ping |
 | POST | `/api/v1/signup` | No | Register with email/password |
 | POST | `/api/v1/login` | No | Issue Bearer access token |
-| POST | `/api/v1/forgot-password` | No | Start password reset (`reset_token` only if `EXPOSE_RESET_TOKEN=true`) |
+| POST | `/api/v1/forgot-password` | No | Start password reset (email + optional `reset_token` if exposed) |
 | POST | `/api/v1/reset-password` | No | Set new password with reset token |
-| GET | `/api/v1/me` | Bearer JWT | Current user id from token |
+| GET | `/api/v1/me` | Bearer JWT | Current user profile |
 
