@@ -67,4 +67,7 @@ Local mail: `docker compose up -d mailpit` then open [http://localhost:8025](htt
 | POST | `/api/v1/forgot-password` | No | Start password reset (email + optional `reset_token` if exposed) |
 | POST | `/api/v1/reset-password` | No | Set new password with reset token |
 | GET | `/api/v1/me` | Bearer JWT | Current user profile |
+| PATCH | `/api/v1/me` | Bearer JWT | Update first/last name |
+| POST | `/api/v1/change-password` | Bearer JWT | Change password (invalidates current tokens) |
+| POST | `/api/v1/logout` | Bearer JWT | Invalidate current access tokens |
 

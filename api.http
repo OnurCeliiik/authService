@@ -35,6 +35,33 @@ Content-Type: application/json
 GET {{baseUrl}}/api/v1/me
 Authorization: Bearer {{accessToken}}
 
+### Update profile
+PATCH {{baseUrl}}/api/v1/me
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "first_name": "Updated",
+  "last_name": "Name"
+}
+
+### Change password
+# Invalidates the current access token (TokenVersion bump). Login again after this.
+POST {{baseUrl}}/api/v1/change-password
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "current_password": "{{password}}",
+  "new_password": "{{newPassword}}",
+  "confirm_new_password": "{{newPassword}}"
+}
+
+### Logout
+# Invalidates the current access token (logout-all for access-token-only sessions).
+POST {{baseUrl}}/api/v1/logout
+Authorization: Bearer {{accessToken}}
+
 ### Forgot password
 # @name forgotPassword
 POST {{baseUrl}}/api/v1/forgot-password
@@ -56,7 +83,7 @@ Content-Type: application/json
   "confirm_new_password": "{{newPassword}}"
 }
 
-### Login with new password (after reset)
+### Login with new password (after reset or change-password)
 POST {{baseUrl}}/api/v1/login
 Content-Type: application/json
 

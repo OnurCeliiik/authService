@@ -85,3 +85,48 @@ func postJSON(t *testing.T, path string, body any) *httptest.ResponseRecorder {
 	testRouter.ServeHTTP(w, req)
 	return w
 }
+
+func postJSONAuth(t *testing.T, path, token string, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	var reader *bytes.Reader
+	if body == nil {
+		reader = bytes.NewReader(nil)
+	} else {
+		b, err := json.Marshal(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		reader = bytes.NewReader(b)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, path, reader)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	testRouter.ServeHTTP(w, req)
+	return w
+}
+
+func patchJSONAuth(t *testing.T, path, token string, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	b, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPatch, path, bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	testRouter.ServeHTTP(w, req)
+	return w
+}
+
+func getAuth(t *testing.T, path, token string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	testRouter.ServeHTTP(w, req)
+	return w
+}

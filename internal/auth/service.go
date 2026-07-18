@@ -215,6 +215,83 @@ func (s *authService) ForgotPassword(ctx context.Context, input *ForgotPasswordI
 	return resp, nil
 }
 
+func (s *authService) ChangePassword(ctx context.Context, userID uuid.UUID, input *ChangePasswordInput) (*ChangePasswordResponse, error) {
+	user, err := s.repo.FindUserByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(input.CurrentPassword)); err != nil {
+		return nil, ErrInvalidCredentials
+	}
+
+	if input.CurrentPassword == input.NewPassword {
+		return nil, ErrSamePassword
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(input.NewPassword), bcryptCost)
+	if err != nil {
+		return nil, err
+	}
+
+	user.PasswordHash = string(hash)
+	user.TokenVersion++
+	user.UpdatedAt = time.Now()
+
+	if err := s.repo.UpdateUser(ctx, user); err != nil {
+		return nil, err
+	}
+
+	return &ChangePasswordResponse{Success: true}, nil
+}
+
+func (s *authService) UpdateMe(ctx context.Context, userID uuid.UUID, input *UpdateMeInput) (*UpdateMeResponse, error) {
+	if input.FirstName == "" && input.LastName == "" {
+		return nil, ErrNoProfileUpdates
+	}
+
+	user, err := s.repo.FindUserByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if input.FirstName != "" {
+		user.FirstName = input.FirstName
+	}
+	if input.LastName != "" {
+		user.LastName = input.LastName
+	}
+	user.UpdatedAt = time.Now()
+
+	if err := s.repo.UpdateUser(ctx, user); err != nil {
+		return nil, err
+	}
+
+	return &UpdateMeResponse{
+		ID:        user.ID,
+		Email:     user.Email,
+		FirstName: user.FirstName,
+		LastName:  user.LastName,
+		UpdatedAt: user.UpdatedAt,
+	}, nil
+}
+
+func (s *authService) LogOut(ctx context.Context, userID uuid.UUID) error {
+	user, err := s.repo.FindUserByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	user.TokenVersion++
+	user.UpdatedAt = time.Now()
+
+	if err := s.repo.UpdateUser(ctx, user); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func generateResetToken() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {

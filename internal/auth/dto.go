@@ -83,3 +83,38 @@ type MeResponse struct {
 	LastName  string    `json:"last_name"`
 	CreatedAt time.Time `json:"created_at"`
 }
+
+type ChangePasswordRequest struct {
+	CurrentPassword    string `json:"current_password" binding:"required,min=6"`
+	NewPassword        string `json:"new_password" binding:"required,min=6"`
+	ConfirmNewPassword string `json:"confirm_new_password" binding:"required"`
+}
+
+type ChangePasswordInput struct {
+	UserID          uuid.UUID
+	CurrentPassword string
+	NewPassword     string
+}
+
+type ChangePasswordResponse struct {
+	Success bool `json:"success"`
+}
+
+type UpdateMeRequest struct {
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+}
+
+type UpdateMeInput struct {
+	UserID    uuid.UUID
+	FirstName string
+	LastName  string
+}
+
+type UpdateMeResponse struct {
+	ID        uuid.UUID `json:"id"`
+	Email     string    `json:"email"`
+	FirstName string    `json:"first_name"`
+	LastName  string    `json:"last_name"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
