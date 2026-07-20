@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"golang.org/x/oauth2"
 )
 
 func main() {
@@ -57,8 +58,21 @@ func main() {
 
 	repo := auth.NewUserRepository(db)
 	jwtCfg := jwt.Config{Secret: []byte(cfg.JWTSecret), TTL: cfg.JWTTTL}
-	svc := auth.NewAuthService(repo, jwtCfg, cfg.ExposeResetToken, mail, cfg.AppBaseURL)
-	authHandler := auth.NewAuthHandler(svc)
+	svc := auth.NewAuthService(repo, jwtCfg, cfg.RefreshTokenTTL, cfg.ExposeResetToken, mail, cfg.AppBaseURL)
+
+	var googleCfg *oauth2.Config
+	if cfg.Google.Enabled() {
+		googleCfg = auth.NewGoogleOAuth(
+			cfg.Google.ClientID,
+			cfg.Google.ClientSecret,
+			cfg.Google.RedirectURI,
+		)
+		log.Println("google oauth: enabled")
+	} else {
+		log.Println("google oauth: disabled (missing GOOGLE_* env)")
+	}
+
+	authHandler := auth.NewAuthHandler(svc, googleCfg)
 	healthHandler := health.NewHandler(db)
 
 	router := gin.Default()

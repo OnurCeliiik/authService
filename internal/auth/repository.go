@@ -111,3 +111,56 @@ func (r *userRepository) InvalidateUnusedPasswordResetTokensForUser(
 		Where("user_id = ? AND used_at IS NULL", userID).
 		Update("used_at", usedAt).Error
 }
+
+func (r *userRepository) CreateRefreshToken(ctx context.Context, token *RefreshToken) error {
+	return r.db.WithContext(ctx).Create(token).Error
+}
+
+func (r *userRepository) FindValidRefreshToken(ctx context.Context, tokenHash string) (*RefreshToken, error) {
+	var token RefreshToken
+
+	err := r.db.WithContext(ctx).
+		Where("token_hash = ? AND revoked_at IS NULL AND expires_at > ?", tokenHash, time.Now()).
+		First(&token).Error
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrRefreshTokenNotFound
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &token, nil
+}
+
+func (r *userRepository) RevokeRefreshToken(ctx context.Context, id uuid.UUID) error {
+	return r.db.WithContext(ctx).
+		Model(&RefreshToken{}).
+		Where("id = ?", id).
+		Update("revoked_at", time.Now()).Error
+}
+
+func (r *userRepository) RevokeAllRefreshTokensForUser(ctx context.Context, userID uuid.UUID) error {
+	return r.db.WithContext(ctx).
+		Model(&RefreshToken{}).
+		Where("user_id = ? AND revoked_at IS NULL", userID).
+		Update("revoked_at", time.Now()).Error
+}
+
+func (r *userRepository) FindUserByGoogleID(ctx context.Context, googleID string) (*User, error) {
+	var user User
+
+	err := r.db.WithContext(ctx).
+		Where("google_id = ?", googleID).
+		First(&user).Error
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrUserNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}

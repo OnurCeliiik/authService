@@ -52,8 +52,8 @@ func TestMain(m *testing.M) {
 		Secret: []byte(os.Getenv("JWT_SECRET")),
 		TTL:    mustParseDuration(os.Getenv("JWT_TTL")),
 	}
-	svc := auth.NewAuthService(repo, jwtCfg, true, email.NewLogSender(), "http://localhost:8080")
-	authHandler := auth.NewAuthHandler(svc)
+	svc := auth.NewAuthService(repo, jwtCfg, 168*time.Hour, true, email.NewLogSender(), "http://localhost:8080")
+	authHandler := auth.NewAuthHandler(svc, nil)
 	healthHandler := health.NewHandler(testDB)
 
 	testRouter = gin.Default()

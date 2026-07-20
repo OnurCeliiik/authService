@@ -43,5 +43,6 @@ func AutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&auth.User{},
 		&auth.PasswordResetToken{},
+		&auth.RefreshToken{},
 	)
 }

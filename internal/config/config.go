@@ -14,15 +14,27 @@ type Config struct {
 	DatabaseURL      string
 	JWTSecret        string
 	JWTTTL           time.Duration
+	RefreshTokenTTL  time.Duration
 	ExposeResetToken bool
 	AppBaseURL       string
 	Email            EmailConfig
+	Google           GoogleOAuthConfig
 }
 
 type EmailConfig struct {
 	SMTPHost string
 	SMTPPort string
 	SMTPFrom string
+}
+
+type GoogleOAuthConfig struct {
+	ClientID     string
+	ClientSecret string
+	RedirectURI  string
+}
+
+func (g GoogleOAuthConfig) Enabled() bool {
+	return g.ClientID != "" && g.ClientSecret != "" && g.RedirectURI != ""
 }
 
 func LoadConfig() Config {
@@ -50,6 +62,16 @@ func LoadConfig() Config {
 		log.Fatal("invalid JWT_TTL: ", err)
 	}
 
+	refreshTokenTTLStr := os.Getenv("REFRESH_TOKEN_TTL")
+	if refreshTokenTTLStr == "" {
+		refreshTokenTTLStr = "168h"
+	}
+
+	refreshTokenTTL, err := time.ParseDuration(refreshTokenTTLStr)
+	if err != nil {
+		log.Fatal("invalid REFRESH_TOKEN_TTL: ", err)
+	}
+
 	exposeResetToken := strings.EqualFold(os.Getenv("EXPOSE_RESET_TOKEN"), "true")
 	if !exposeResetToken && strings.EqualFold(os.Getenv("APP_ENV"), "development") {
 		exposeResetToken = true
@@ -70,11 +92,18 @@ func LoadConfig() Config {
 		smtpFrom = "noreply@authservice.local"
 	}
 
+	google := GoogleOAuthConfig{
+		ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+		ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+		RedirectURI:  os.Getenv("GOOGLE_REDIRECT_URI"),
+	}
+
 	return Config{
 		Port:             port,
 		DatabaseURL:      databaseURL,
 		JWTSecret:        secret,
 		JWTTTL:           ttl,
+		RefreshTokenTTL:  refreshTokenTTL,
 		ExposeResetToken: exposeResetToken,
 		AppBaseURL:       appBaseURL,
 		Email: EmailConfig{
@@ -82,5 +111,6 @@ func LoadConfig() Config {
 			SMTPPort: smtpPort,
 			SMTPFrom: smtpFrom,
 		},
+		Google: google,
 	}
 }

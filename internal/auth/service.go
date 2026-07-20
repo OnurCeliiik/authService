@@ -30,11 +30,17 @@ type UserRepository interface {
 	MarkPasswordResetTokenUsed(ctx context.Context, tokenID uuid.UUID, usedAt time.Time) error
 	InvalidateUnusedPasswordResetTokensForUser(ctx context.Context, userID uuid.UUID, usedAt time.Time) error
 	GetUserTokenVersion(ctx context.Context, userID uuid.UUID) (int, error)
+	CreateRefreshToken(ctx context.Context, token *RefreshToken) error
+	FindValidRefreshToken(ctx context.Context, tokenHash string) (*RefreshToken, error)
+	RevokeRefreshToken(ctx context.Context, id uuid.UUID) error
+	RevokeAllRefreshTokensForUser(ctx context.Context, userID uuid.UUID) error
+	FindUserByGoogleID(ctx context.Context, googleID string) (*User, error)
 }
 
 type authService struct {
 	repo             UserRepository
 	jwtCfg           jwt.Config
+	refreshTokenTTL  time.Duration
 	exposeResetToken bool
 	emailSender      email.Sender
 	appBaseURL       string
@@ -43,6 +49,7 @@ type authService struct {
 func NewAuthService(
 	repo UserRepository,
 	jwtCfg jwt.Config,
+	refreshTokenTTL time.Duration,
 	exposeResetToken bool,
 	emailSender email.Sender,
 	appBaseURL string,
@@ -50,6 +57,7 @@ func NewAuthService(
 	return &authService{
 		repo:             repo,
 		jwtCfg:           jwtCfg,
+		refreshTokenTTL:  refreshTokenTTL,
 		exposeResetToken: exposeResetToken,
 		emailSender:      emailSender,
 		appBaseURL:       appBaseURL,
@@ -57,6 +65,34 @@ func NewAuthService(
 }
 
 var _ UserService = (*authService)(nil)
+
+func (s *authService) issueTokenPair(ctx context.Context, user *User) (*LoginResponse, error) {
+	access, expiresAt, err := jwt.Generate(user.ID, user.TokenVersion, s.jwtCfg)
+	if err != nil {
+		return nil, err
+	}
+
+	rawRefresh, err := generateOpaqueToken()
+	if err != nil {
+		return nil, err
+	}
+
+	refresh := &RefreshToken{
+		UserID:    user.ID,
+		TokenHash: hashToken(rawRefresh),
+		ExpiresAt: time.Now().Add(s.refreshTokenTTL),
+	}
+	if err := s.repo.CreateRefreshToken(ctx, refresh); err != nil {
+		return nil, err
+	}
+
+	return &LoginResponse{
+		AccessToken:  access,
+		RefreshToken: rawRefresh,
+		TokenType:    "Bearer",
+		ExpiresIn:    int64(time.Until(expiresAt).Seconds()),
+	}, nil
+}
 
 func (s *authService) Signup(ctx context.Context, input *SignupInput) (*SignupResponse, error) {
 	existing, err := s.repo.FindUserByEmail(ctx, input.Email)
@@ -105,20 +141,36 @@ func (s *authService) Login(ctx context.Context, input *LoginInput) (*LoginRespo
 		return nil, err
 	}
 
+	if user.PasswordHash == "" {
+		return nil, ErrNoLocalPassword
+	}
+
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(input.Password)); err != nil {
 		return nil, ErrInvalidCredentials
 	}
 
-	token, expiresAt, err := jwt.Generate(user.ID, user.TokenVersion, s.jwtCfg)
+	return s.issueTokenPair(ctx, user)
+}
+
+func (s *authService) Refresh(ctx context.Context, input *RefreshInput) (*LoginResponse, error) {
+	row, err := s.repo.FindValidRefreshToken(ctx, hashToken(input.RefreshToken))
+	if err != nil {
+		if errors.Is(err, ErrRefreshTokenNotFound) {
+			return nil, ErrInvalidToken
+		}
+		return nil, err
+	}
+
+	user, err := s.repo.FindUserByID(ctx, row.UserID)
 	if err != nil {
 		return nil, err
 	}
 
-	return &LoginResponse{
-		AccessToken: token,
-		TokenType:   "Bearer",
-		ExpiresIn:   int64(time.Until(expiresAt).Seconds()),
-	}, nil
+	if err := s.repo.RevokeRefreshToken(ctx, row.ID); err != nil {
+		return nil, err
+	}
+
+	return s.issueTokenPair(ctx, user)
 }
 
 func (s *authService) Me(ctx context.Context, userID uuid.UUID) (*MeResponse, error) {
@@ -137,7 +189,7 @@ func (s *authService) Me(ctx context.Context, userID uuid.UUID) (*MeResponse, er
 }
 
 func (s *authService) ResetPassword(ctx context.Context, input *ResetPasswordInput) (*ResetPasswordResponse, error) {
-	tokenHash := hashResetToken(input.Token)
+	tokenHash := hashToken(input.Token)
 	resetToken, err := s.repo.FindValidPasswordResetToken(ctx, tokenHash)
 	if err != nil {
 		if errors.Is(err, ErrResetTokenNotFound) {
@@ -169,6 +221,10 @@ func (s *authService) ResetPassword(ctx context.Context, input *ResetPasswordInp
 		return nil, err
 	}
 
+	if err := s.repo.RevokeAllRefreshTokensForUser(ctx, user.ID); err != nil {
+		return nil, err
+	}
+
 	return &ResetPasswordResponse{Success: true}, nil
 }
 
@@ -186,7 +242,7 @@ func (s *authService) ForgotPassword(ctx context.Context, input *ForgotPasswordI
 		return nil, err
 	}
 
-	rawToken, err := generateResetToken()
+	rawToken, err := generateOpaqueToken()
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +250,7 @@ func (s *authService) ForgotPassword(ctx context.Context, input *ForgotPasswordI
 	expiresAt := now.Add(passwordResetTokenTTL)
 	resetToken := &PasswordResetToken{
 		UserID:    user.ID,
-		TokenHash: hashResetToken(rawToken),
+		TokenHash: hashToken(rawToken),
 		ExpiresAt: expiresAt,
 	}
 	if err := s.repo.CreatePasswordResetToken(ctx, resetToken); err != nil {
@@ -221,6 +277,10 @@ func (s *authService) ChangePassword(ctx context.Context, userID uuid.UUID, inpu
 		return nil, err
 	}
 
+	if user.PasswordHash == "" {
+		return nil, ErrNoLocalPassword
+	}
+
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(input.CurrentPassword)); err != nil {
 		return nil, ErrInvalidCredentials
 	}
@@ -239,6 +299,10 @@ func (s *authService) ChangePassword(ctx context.Context, userID uuid.UUID, inpu
 	user.UpdatedAt = time.Now()
 
 	if err := s.repo.UpdateUser(ctx, user); err != nil {
+		return nil, err
+	}
+
+	if err := s.repo.RevokeAllRefreshTokensForUser(ctx, user.ID); err != nil {
 		return nil, err
 	}
 
@@ -289,10 +353,70 @@ func (s *authService) LogOut(ctx context.Context, userID uuid.UUID) error {
 		return err
 	}
 
-	return nil
+	return s.repo.RevokeAllRefreshTokensForUser(ctx, user.ID)
 }
 
-func generateResetToken() (string, error) {
+func (s *authService) LoginWithGoogle(ctx context.Context, profile *GoogleProfile) (*LoginResponse, error) {
+	if profile == nil || profile.ID == "" || profile.Email == "" {
+		return nil, ErrInvalidToken
+	}
+
+	user, err := s.repo.FindUserByGoogleID(ctx, profile.ID)
+	if err == nil {
+		return s.issueTokenPair(ctx, user)
+	}
+	if !errors.Is(err, ErrUserNotFound) {
+		return nil, err
+	}
+
+	user, err = s.repo.FindUserByEmail(ctx, profile.Email)
+	if err == nil {
+		googleID := profile.ID
+		user.GoogleID = &googleID
+		user.UpdatedAt = time.Now()
+		if user.FirstName == "" && profile.FirstName != "" {
+			user.FirstName = profile.FirstName
+		}
+		if user.LastName == "" && profile.LastName != "" {
+			user.LastName = profile.LastName
+		}
+		if err := s.repo.UpdateUser(ctx, user); err != nil {
+			return nil, err
+		}
+		return s.issueTokenPair(ctx, user)
+	}
+	if !errors.Is(err, ErrUserNotFound) {
+		return nil, err
+	}
+
+	googleID := profile.ID
+	firstName := profile.FirstName
+	if firstName == "" {
+		firstName = "Google"
+	}
+	lastName := profile.LastName
+	if lastName == "" {
+		lastName = "User"
+	}
+
+	user = &User{
+		Email:        profile.Email,
+		PasswordHash: "",
+		GoogleID:     &googleID,
+		FirstName:    firstName,
+		LastName:     lastName,
+		TokenVersion: 0,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+	if err := s.repo.CreateUser(ctx, user); err != nil {
+		return nil, err
+	}
+
+	return s.issueTokenPair(ctx, user)
+}
+
+func generateOpaqueToken() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
@@ -300,7 +424,7 @@ func generateResetToken() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-func hashResetToken(token string) string {
+func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
 }

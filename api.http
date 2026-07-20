@@ -3,6 +3,7 @@
 @password = password123
 @newPassword = newpassword123
 @accessToken = {{login.response.body.access_token}}
+@refreshToken = {{login.response.body.refresh_token}}
 @resetToken = {{forgotPassword.response.body.reset_token}}
 
 ### Health
@@ -30,6 +31,20 @@ Content-Type: application/json
   "password": "{{password}}"
 }
 
+### Refresh tokens
+# @name refresh
+# Rotates refresh token; old refresh_token becomes invalid.
+POST {{baseUrl}}/api/v1/refresh
+Content-Type: application/json
+
+{
+  "refresh_token": "{{refreshToken}}"
+}
+
+### Google OAuth (open in browser)
+# GET {{baseUrl}}/api/v1/oauth/google
+# After Google consent, callback returns access_token + refresh_token JSON.
+
 ### Me (requires access token from Login)
 # Returns id, email, first_name, last_name, created_at
 GET {{baseUrl}}/api/v1/me
@@ -46,7 +61,7 @@ Content-Type: application/json
 }
 
 ### Change password
-# Invalidates the current access token (TokenVersion bump). Login again after this.
+# Invalidates access + refresh tokens. Login again after this.
 POST {{baseUrl}}/api/v1/change-password
 Authorization: Bearer {{accessToken}}
 Content-Type: application/json
@@ -58,7 +73,7 @@ Content-Type: application/json
 }
 
 ### Logout
-# Invalidates the current access token (logout-all for access-token-only sessions).
+# Bumps TokenVersion and revokes all refresh tokens for the user.
 POST {{baseUrl}}/api/v1/logout
 Authorization: Bearer {{accessToken}}
 

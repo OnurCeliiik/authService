@@ -12,7 +12,8 @@ import (
 type User struct {
 	ID           uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
 	Email        string         `gorm:"not null;unique" json:"email"`
-	PasswordHash string         `gorm:"not null" json:"-"`
+	PasswordHash string         `gorm:"default:''" json:"-"`
+	GoogleID     *string        `gorm:"uniqueIndex" json:"-"`
 	FirstName    string         `gorm:"not null" json:"first_name"`
 	LastName     string         `gorm:"not null" json:"last_name"`
 	TokenVersion int            `gorm:"not null;default:0" json:"-"`
@@ -38,6 +39,22 @@ type PasswordResetToken struct {
 }
 
 func (t *PasswordResetToken) BeforeCreate(tx *gorm.DB) error {
+	if t.ID == uuid.Nil {
+		t.ID = uuid.New()
+	}
+	return nil
+}
+
+type RefreshToken struct {
+	ID        uuid.UUID  `gorm:"type:uuid;primaryKey"`
+	UserID    uuid.UUID  `gorm:"type:uuid;index;not null"`
+	TokenHash string     `gorm:"uniqueIndex;not null"`
+	ExpiresAt time.Time  `gorm:"not null;index"`
+	RevokedAt *time.Time `gorm:"index"`
+	CreatedAt time.Time
+}
+
+func (t *RefreshToken) BeforeCreate(tx *gorm.DB) error {
 	if t.ID == uuid.Nil {
 		t.ID = uuid.New()
 	}
